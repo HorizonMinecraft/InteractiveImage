@@ -16,6 +16,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 
 import java.util.Map;
 import java.util.UUID;
@@ -45,10 +46,24 @@ public final class FocusedAirClickListener implements Listener {
         this.editorManager = editorManager;
     }
 
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
+    @EventHandler(priority = EventPriority.HIGH)
     public void onAirClick(PlayerInteractEvent event) {
+        // Only process the main hand to avoid firing twice (Bukkit fires once per hand).
+        if (event.getHand() != EquipmentSlot.HAND) {
+            return;
+        }
+
         Action action = event.getAction();
-        if (action != Action.RIGHT_CLICK_AIR && action != Action.LEFT_CLICK_AIR) {
+        // Handle both AIR and BLOCK clicks. When the player is far from the frame but
+        // there is a block within normal reach in their line of sight, Minecraft fires
+        // RIGHT_CLICK_BLOCK / LEFT_CLICK_BLOCK rather than the *_AIR variants, so we
+        // must handle both to support clicking from any distance.
+        // Note: ignoreCancelled is intentionally NOT set — block-click events are often
+        // pre-cancelled by the server (e.g. no permission to place), and we still need
+        // to process them to detect far-distance frame clicks.
+        boolean isRight = action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
+        boolean isLeft  = action == Action.LEFT_CLICK_AIR  || action == Action.LEFT_CLICK_BLOCK;
+        if (!isRight && !isLeft) {
             return;
         }
 
@@ -57,34 +72,61 @@ public final class FocusedAirClickListener implements Listener {
             return;
         }
 
-        FocusState focus = focusScanner == null ? null : focusScanner.getFocusState(player.getUniqueId());
-        if (focus == null) {
-            return;
-        }
-        ResolvedTarget resolved = focus.target();
-        if (resolved == null || resolved.rule() == null) {
-            return;
-        }
-
         InteractiveImageConfig cfg = configSupplier.get();
 
-        World world = Bukkit.getWorld(focus.worldUuid());
-        if (world == null) {
-            return;
-        }
-        var entity = world.getEntity(focus.frameUuid());
-        if (!(entity instanceof ItemFrame frame) || frame.isDead() || !frame.isValid()) {
-            return;
+        // Try the cached focus state first. If the player clicks before the periodic
+        // scanner tick has run (e.g. they just walked up and immediately clicked),
+        // fall back to a live ray-trace so the click is never silently dropped.
+        FocusState focus = focusScanner == null ? null : focusScanner.getFocusState(player.getUniqueId());
+
+        ItemFrame frame;
+        ResolvedTarget resolved;
+
+        if (focus != null && focus.target() != null && focus.target().rule() != null) {
+            // Use cached focus state
+            World world = Bukkit.getWorld(focus.worldUuid());
+            if (world == null) {
+                return;
+            }
+            var entity = world.getEntity(focus.frameUuid());
+            if (!(entity instanceof ItemFrame f) || f.isDead() || !f.isValid()) {
+                return;
+            }
+            frame = f;
+            resolved = focus.target();
+        } else {
+            // No cached focus — do a live ray-trace fallback
+            if (focusScanner == null) {
+                return;
+            }
+            var liveResolved = focusScanner.resolveClickTarget(player);
+            if (liveResolved.isEmpty() || liveResolved.get().rule() == null) {
+                return;
+            }
+            resolved = liveResolved.get();
+            World world = player.getWorld();
+            var entity = world.getEntity(resolved.frameUuid());
+            if (!(entity instanceof ItemFrame f) || f.isDead() || !f.isValid()) {
+                return;
+            }
+            frame = f;
         }
 
         if (!withinClickDistance(player, frame, cfg, resolved)) {
             return;
         }
 
-        InteractiveFrameClickEvent.ClickType clickType =
-                action == Action.RIGHT_CLICK_AIR
-                        ? InteractiveFrameClickEvent.ClickType.RIGHT_CLICK
-                        : InteractiveFrameClickEvent.ClickType.LEFT_CLICK;
+        // If the player is close enough for vanilla entity interaction (~3 blocks),
+        // FrameInteractListener already handles it via PlayerInteractEntityEvent.
+        // Only fire here for the extended-range case to avoid double-firing actions.
+        double distSq = player.getEyeLocation().distanceSquared(frame.getLocation());
+        if (distSq <= 3.0 * 3.0) {
+            return;
+        }
+
+        InteractiveFrameClickEvent.ClickType clickType = isRight
+                ? InteractiveFrameClickEvent.ClickType.RIGHT_CLICK
+                : InteractiveFrameClickEvent.ClickType.LEFT_CLICK;
 
         var apiEvent = new InteractiveFrameClickEvent(player, frame, clickType, resolved.providerId(), resolved.mapName(), resolved.title());
         Bukkit.getPluginManager().callEvent(apiEvent);

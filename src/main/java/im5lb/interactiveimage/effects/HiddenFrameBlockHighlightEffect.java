@@ -1,6 +1,7 @@
 package im5lb.interactiveimage.effects;
 
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.BlockDisplay;
@@ -96,19 +97,26 @@ public final class HiddenFrameBlockHighlightEffect {
         // Spawn at the exact block position; BlockDisplay origin is the block corner.
         Location loc = attached.getLocation();
         BlockDisplay display = frame.getWorld().spawn(loc, BlockDisplay.class, d -> {
-            d.setBlock(attached.getBlockData());
+            // Use WHITE_STAINED_GLASS (full-cube, no border texture unlike regular GLASS,
+            // fully transparent appearance when pushed into the wall behind the frame).
+            // BARRIER/STRUCTURE_VOID have no render model so their glow outline never draws.
+            // Regular GLASS has a 1px dark border that shows up as a grid in the glow outline.
+            // Stained glass has a flat solid-color texture with no edge detail — clean outline.
+            d.setBlock(Material.WHITE_STAINED_GLASS.createBlockData());
             d.setGlowing(true);
             d.setPersistent(false);
             d.setBrightness(new Display.Brightness(15, 15));
             applyGlowColorOverride(d, glowColor);
 
+            // Push the display slightly INTO the wall (opposite of facing direction)
+            // so it doesn't overlap and occlude the item frame in front of it.
             Vector dir = frame.getFacing().getDirection();
             float eps = 0.01f;
             float pad = -0.005f;
             Vector3f translation = new Vector3f(
-                    pad + (float) dir.getX() * eps,
-                    pad + (float) dir.getY() * eps,
-                    pad + (float) dir.getZ() * eps
+                    pad - (float) dir.getX() * eps,
+                    pad - (float) dir.getY() * eps,
+                    pad - (float) dir.getZ() * eps
             );
             d.setTransformation(new Transformation(
                     translation,

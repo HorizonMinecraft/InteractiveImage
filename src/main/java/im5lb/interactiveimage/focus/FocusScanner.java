@@ -6,7 +6,6 @@ import im5lb.interactiveimage.effects.EffectManager;
 import im5lb.interactiveimage.hooks.TargetResolver;
 import im5lb.interactiveimage.model.ResolvedTarget;
 import org.bukkit.Bukkit;
-import org.bukkit.FluidCollisionMode;
 import org.bukkit.World;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
@@ -170,6 +169,43 @@ public final class FocusScanner {
         return focusByPlayer.get(playerUuid);
     }
 
+    /**
+     * Performs a live ray-trace to resolve what the player is currently looking at,
+     * using click distance rather than hover distance.
+     * Used as a fallback when no cached focus state exists (e.g. the player clicks
+     * before the periodic scanner tick has run, or clicks from beyond hover range).
+     */
+    public Optional<ResolvedTarget> resolveClickTarget(Player player) {
+        InteractiveImageConfig cfg = configSupplier.get();
+        ItemFrame frame = rayTraceItemFrame(player, MAX_RAYTRACE_DISTANCE);
+        if (frame == null) {
+            return Optional.empty();
+        }
+        for (TargetResolver resolver : resolvers) {
+            Optional<ResolvedTarget> resolved = resolver.resolve(frame, player, cfg);
+            if (resolved.isPresent()) {
+                ResolvedTarget target = resolved.get();
+                if (!withinClickDistance(player, frame, cfg, target)) {
+                    return Optional.empty();
+                }
+                return Optional.of(target);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean withinClickDistance(Player player, ItemFrame frame, InteractiveImageConfig cfg, ResolvedTarget target) {
+        double max = cfg.activation().click().maxDistance();
+        var rule = target.rule();
+        if (rule != null && rule.activation() != null && rule.activation().clickMaxDistance() != null) {
+            max = rule.activation().clickMaxDistance();
+        }
+        if (max <= 0.0) {
+            return false;
+        }
+        return player.getEyeLocation().distanceSquared(frame.getLocation()) <= (max * max);
+    }
+
     private void pruneOfflinePlayers(InteractiveImageConfig cfg) {
         Iterator<Map.Entry<UUID, FocusState>> it = focusByPlayer.entrySet().iterator();
         while (it.hasNext()) {
@@ -255,12 +291,13 @@ public final class FocusScanner {
         var eye = player.getEyeLocation();
         Vector direction = eye.getDirection();
 
-        RayTraceResult result = world.rayTrace(
+        // Use entity-only ray trace so solid blocks between the player and the frame
+        // do not block detection. This is intentional: the frame is on the wall face,
+        // and the wall block itself would otherwise stop a combined block+entity trace.
+        RayTraceResult result = world.rayTraceEntities(
                 eye,
                 direction,
                 maxDistance,
-                FluidCollisionMode.NEVER,
-                true,
                 0.0,
                 entity -> entity instanceof ItemFrame
         );
