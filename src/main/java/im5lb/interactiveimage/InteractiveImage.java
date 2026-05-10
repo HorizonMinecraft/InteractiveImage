@@ -14,6 +14,7 @@ import im5lb.interactiveimage.effects.TitleEffect;
 import im5lb.interactiveimage.focus.FocusScanner;
 import im5lb.interactiveimage.hooks.TargetResolver;
 import im5lb.interactiveimage.hooks.imageframe.ImageFrameResolver;
+import im5lb.interactiveimage.imageswap.ImageSwapManager;
 import im5lb.interactiveimage.listeners.FrameInteractListener;
 import im5lb.interactiveimage.listeners.FocusedAirClickListener;
 import im5lb.interactiveimage.store.JsonRuleStore;
@@ -36,6 +37,7 @@ public final class InteractiveImage extends JavaPlugin {
     private FrameInteractListener frameInteractListener;
     private EditorManager editorManager;
     private JsonRuleStore ruleStore;
+    private ImageSwapManager imageSwapManager;
 
     private final List<TargetResolver> resolvers = new ArrayList<>();
 
@@ -78,9 +80,9 @@ public final class InteractiveImage extends JavaPlugin {
                 new BossBarEffect()
         );
 
-        resolvers.add(new ImageFrameResolver(this, ruleStore));
-
-        focusScanner = new FocusScanner(this, () -> configModel, resolvers, effectManager);
+        imageSwapManager = new ImageSwapManager(this);
+        resolvers.add(new ImageFrameResolver(this, ruleStore, imageSwapManager));
+        focusScanner = new FocusScanner(this, () -> configModel, resolvers, effectManager, imageSwapManager);
         editorManager = new EditorManager(this);
         frameInteractListener = new FrameInteractListener(this, () -> configModel, resolvers, editorManager, focusScanner::getFocusedFrameUuid);
 
@@ -145,6 +147,10 @@ public final class InteractiveImage extends JavaPlugin {
 
     public RuleStore getRuleStore() {
         return ruleStore;
+    }
+
+    public ImageSwapManager getImageSwapManager() {
+        return imageSwapManager;
     }
 
     private static final class InteractiveFrameDefaults {

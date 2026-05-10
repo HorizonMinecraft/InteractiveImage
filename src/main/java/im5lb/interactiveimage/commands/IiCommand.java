@@ -67,14 +67,28 @@ public final class IiCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        player.sendMessage("Usage: /" + label + " [on|off] | /" + label + " reload");
+        if ("enable".equals(sub) || "disable".equals(sub)) {
+            if (args.length < 2) {
+                player.sendMessage("Usage: /" + label + " " + sub + " <mapName>");
+                return true;
+            }
+            String mapName = args[1];
+            boolean enableMap = "enable".equals(sub);
+            IiConfigEditor.ensureImageFrameRuleExists(plugin, mapName);
+            IiConfigEditor.setEnabled(plugin, mapName, enableMap);
+            plugin.clearFocusedImageFrameMap(mapName);
+            player.sendMessage("Map '" + mapName + "' is now " + (enableMap ? "enabled" : "disabled") + ".");
+            return true;
+        }
+
+        player.sendMessage("Usage: /" + label + " [on|off] | /" + label + " reload | /" + label + " enable/disable <mapName>");
         return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return partial(args[0], List.of("on", "off", "reload"));
+            return partial(args[0], List.of("on", "off", "reload", "enable", "disable"));
         }
         return List.of();
     }

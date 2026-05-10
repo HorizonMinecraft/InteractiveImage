@@ -3,6 +3,7 @@ package im5lb.interactiveimage.hooks.imageframe;
 import im5lb.interactiveimage.InteractiveImage;
 import im5lb.interactiveimage.config.InteractiveImageConfig;
 import im5lb.interactiveimage.hooks.TargetResolver;
+import im5lb.interactiveimage.imageswap.ImageSwapManager;
 import im5lb.interactiveimage.model.ResolvedTarget;
 import im5lb.interactiveimage.store.RuleStore;
 import org.bukkit.Bukkit;
@@ -20,6 +21,7 @@ public final class ImageFrameResolver implements TargetResolver {
 
     private final InteractiveImage plugin;
     private final RuleStore ruleStore;
+    private final ImageSwapManager imageSwapManager;
 
     private volatile boolean initTried = false;
     private volatile boolean available = false;
@@ -28,9 +30,10 @@ public final class ImageFrameResolver implements TargetResolver {
     private Method getFromMapViewMethod;
     private Method imageMapGetNameMethod;
 
-    public ImageFrameResolver(InteractiveImage plugin, RuleStore ruleStore) {
+    public ImageFrameResolver(InteractiveImage plugin, RuleStore ruleStore, ImageSwapManager imageSwapManager) {
         this.plugin = plugin;
         this.ruleStore = ruleStore;
+        this.imageSwapManager = imageSwapManager;
     }
 
     @Override
@@ -78,10 +81,22 @@ public final class ImageFrameResolver implements TargetResolver {
             mapName = "(unnamed)";
         }
 
+        // If this map is currently being used as a hover target by another frame's swap,
+        // suppress interactivity so it behaves as a plain display image, not interactive.
+        if (!ignoreOnlyConfiguredGate && imageSwapManager != null && imageSwapManager.isSwappedTarget(mapName)) {
+            return Optional.empty();
+        }
+
         var providersCfg = cfg.providers().imageFrame();
         Optional<InteractiveImageConfig.MapRule> ruleOpt = ruleStore.findImageFrameRuleOrWildcard(mapName);
 
         if (!ignoreOnlyConfiguredGate && providersCfg.onlyConfiguredMaps() && ruleOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        InteractiveImageConfig.MapRule rule = ruleOpt.orElse(null);
+        // Skip the enabled check in admin/editor mode so disabled maps can still be edited.
+        if (!ignoreOnlyConfiguredGate && rule != null && !rule.enabled()) {
             return Optional.empty();
         }
 
@@ -92,7 +107,7 @@ public final class ImageFrameResolver implements TargetResolver {
                 frame.getUniqueId(),
                 mapName,
                 title,
-                ruleOpt.orElse(null)
+                rule
         ));
     }
 

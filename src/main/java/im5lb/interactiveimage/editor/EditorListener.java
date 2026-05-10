@@ -3,6 +3,7 @@ package im5lb.interactiveimage.editor;
 import im5lb.interactiveimage.InteractiveImage;
 import im5lb.interactiveimage.commands.IiConfigEditor;
 import im5lb.interactiveimage.config.InteractiveImageConfig;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
@@ -42,6 +43,9 @@ public final class EditorListener implements Listener {
         if (inventory.getHolder() instanceof EditorGui.ActivationHolder holder) {
             handleActivationClick(event, player, inventory, holder);
         }
+        if (inventory.getHolder() instanceof EditorGui.SwapHolder holder) {
+            handleSwapClick(event, player, inventory, holder);
+        }
     }
 
     private void handleMainClick(InventoryClickEvent event, Player player, Inventory inventory, EditorGui.MainHolder holder) {
@@ -67,6 +71,14 @@ public final class EditorListener implements Listener {
             player.openInventory(EditorGui.createMain(plugin, mapName));
             return;
         }
+        if (slot == 21) {
+            Optional<InteractiveImageConfig.MapRule> ruleOpt = plugin.getRuleStore().findImageFrameRule(mapName);
+            boolean currentEnabled = ruleOpt.map(InteractiveImageConfig.MapRule::enabled).orElse(true);
+            IiConfigEditor.setEnabled(plugin, mapName, !currentEnabled);
+            plugin.clearFocusedImageFrameMap(mapName);
+            player.openInventory(EditorGui.createMain(plugin, mapName));
+            return;
+        }
         if (slot == 30) {
             editorManager.beginDialogInput(player, EditorInputType.ADD_RIGHT_ACTION);
             return;
@@ -81,6 +93,10 @@ public final class EditorListener implements Listener {
         }
         if (slot == 23) {
             player.openInventory(EditorGui.createActivation(plugin, mapName));
+            return;
+        }
+        if (slot == 24) {
+            editorManager.openSwapForMap(player, mapName);
             return;
         }
         if (slot == 39) {
@@ -264,6 +280,88 @@ public final class EditorListener implements Listener {
         if (slot == 12) {
             IiConfigEditor.toggleBooleanNoInherit(plugin, mapName, "activation.click.requireHover", plugin.getConfigModel().activation().click().requireHover());
             player.openInventory(EditorGui.createActivation(plugin, mapName));
+        }
+    }
+
+    private void handleSwapClick(InventoryClickEvent event, Player player, Inventory inventory, EditorGui.SwapHolder holder) {
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= inventory.getSize()) {
+            return;
+        }
+
+        event.setCancelled(true);
+
+        ItemStack current = event.getCurrentItem();
+        if (current == null || current.getType() == Material.AIR) {
+            return;
+        }
+
+        String mapName = holder.mapName();
+        int page = holder.page();
+
+        if (slot == 45) {
+            player.openInventory(EditorGui.createMain(plugin, mapName));
+            return;
+        }
+
+        // Revert on Unfocus toggle
+        if (slot == 10) {
+            Optional<InteractiveImageConfig.MapRule> ruleOpt = plugin.getRuleStore().findImageFrameRule(mapName);
+            InteractiveImageConfig.MapRule rule = ruleOpt.orElse(null);
+            InteractiveImageConfig.ImageSwap swap = rule != null ? rule.imageSwap() : null;
+            boolean currentRevert = swap == null || swap.revertOnUnfocus();
+            IiConfigEditor.setImageSwap(plugin, mapName, new InteractiveImageConfig.ImageSwap(
+                    swap != null ? swap.hoverMap() : null, !currentRevert, swap != null ? swap.autoSwapTicks() : 0));
+            player.openInventory(EditorGui.createSwap(plugin, mapName, page));
+            return;
+        }
+
+        // Auto-swap ticks
+        if (slot == 11) {
+            editorManager.beginDialogInput(player, EditorInputType.SWAP_AUTO_TICKS);
+            return;
+        }
+
+        // Clear hover map
+        if (slot == 13) {
+            Optional<InteractiveImageConfig.MapRule> ruleOpt = plugin.getRuleStore().findImageFrameRule(mapName);
+            InteractiveImageConfig.MapRule rule = ruleOpt.orElse(null);
+            InteractiveImageConfig.ImageSwap swap = rule != null ? rule.imageSwap() : null;
+            IiConfigEditor.setImageSwap(plugin, mapName, new InteractiveImageConfig.ImageSwap(
+                    null, swap == null || swap.revertOnUnfocus(), swap != null ? swap.autoSwapTicks() : 0));
+            player.openInventory(EditorGui.createSwap(plugin, mapName, page));
+            return;
+        }
+
+        // Previous page
+        if (slot == 46 && page > 0) {
+            player.openInventory(EditorGui.createSwap(plugin, mapName, page - 1));
+            return;
+        }
+
+        // Next page
+        if (slot == 52) {
+            player.openInventory(EditorGui.createSwap(plugin, mapName, page + 1));
+            return;
+        }
+
+        // Map picker slots
+        int[] pickerSlots = {19,20,21,22,23,24,25, 28,29,30,31,32,33,34, 37,38,39,40,41,42,43};
+        for (int i = 0; i < pickerSlots.length; i++) {
+            if (slot == pickerSlots[i]) {
+                // Extract map name from item display name (strip color codes)
+                String displayName = current.getItemMeta() != null ? current.getItemMeta().getDisplayName() : "";
+                String selectedMap = ChatColor.stripColor(displayName);
+                if (selectedMap != null && !selectedMap.isBlank()) {
+                    Optional<InteractiveImageConfig.MapRule> ruleOpt = plugin.getRuleStore().findImageFrameRule(mapName);
+                    InteractiveImageConfig.MapRule rule = ruleOpt.orElse(null);
+                    InteractiveImageConfig.ImageSwap swap = rule != null ? rule.imageSwap() : null;
+                    IiConfigEditor.setImageSwap(plugin, mapName, new InteractiveImageConfig.ImageSwap(
+                            selectedMap, swap == null || swap.revertOnUnfocus(), swap != null ? swap.autoSwapTicks() : 0));
+                    player.openInventory(EditorGui.createSwap(plugin, mapName, page));
+                }
+                return;
+            }
         }
     }
 }

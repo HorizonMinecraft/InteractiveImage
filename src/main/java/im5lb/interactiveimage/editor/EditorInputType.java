@@ -15,5 +15,7 @@ public enum EditorInputType {
     HOVER_MAX_DISTANCE,
     CLICK_MAX_DISTANCE,
     BOSSBAR_PROGRESS,
+    SWAP_HOVER_MAP,
+    SWAP_AUTO_TICKS,
     ;
 }

@@ -4,6 +4,7 @@ import im5lb.interactiveimage.InteractiveImage;
 import im5lb.interactiveimage.config.InteractiveImageConfig;
 import im5lb.interactiveimage.effects.EffectManager;
 import im5lb.interactiveimage.hooks.TargetResolver;
+import im5lb.interactiveimage.imageswap.ImageSwapManager;
 import im5lb.interactiveimage.model.ResolvedTarget;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -26,6 +27,7 @@ public final class FocusScanner {
     private final Supplier<InteractiveImageConfig> configSupplier;
     private final List<TargetResolver> resolvers;
     private final EffectManager effectManager;
+    private final ImageSwapManager imageSwapManager;
 
     private final Map<UUID, FocusState> focusByPlayer = new HashMap<>();
     private final Map<UUID, HoverState> hoverByPlayer = new HashMap<>();
@@ -36,12 +38,14 @@ public final class FocusScanner {
             InteractiveImage plugin,
             Supplier<InteractiveImageConfig> configSupplier,
             List<TargetResolver> resolvers,
-            EffectManager effectManager
+            EffectManager effectManager,
+            ImageSwapManager imageSwapManager
     ) {
         this.plugin = plugin;
         this.configSupplier = configSupplier;
         this.resolvers = List.copyOf(resolvers);
         this.effectManager = effectManager;
+        this.imageSwapManager = imageSwapManager;
     }
 
     public void start() {
@@ -78,6 +82,7 @@ public final class FocusScanner {
         focusByPlayer.clear();
         hoverByPlayer.clear();
         effectManager.shutdown();
+        imageSwapManager.shutdown();
     }
 
     private void glowTick() {
@@ -112,6 +117,23 @@ public final class FocusScanner {
 
             if (target.isEmpty()) {
                 if (current != null) {
+                    // Don't clear focus if the frame is currently swapped to a non-ImageFrame
+                    // map — the resolver returns empty because it can't see the original map,
+                    // but the player may still be looking at the same frame. Clearing focus
+                    // here would trigger a revert → re-resolve → re-swap loop.
+                    // Only keep focus alive if the player is actually still looking at the
+                    // swapped frame entity.
+                    if (imageSwapManager.isSwapped(current.frameUuid())) {
+                        ItemFrame swappedFrame = getFrame(current.frameUuid(), Bukkit.getWorld(current.worldUuid()));
+                        ItemFrame lookedAt = rayTraceItemFrame(player, MAX_RAYTRACE_DISTANCE);
+                        if (swappedFrame != null && lookedAt != null
+                                && lookedAt.getUniqueId().equals(swappedFrame.getUniqueId())) {
+                            // Still looking at the swapped frame — keep focus, don't revert
+                            hoverByPlayer.remove(player.getUniqueId());
+                            continue;
+                        }
+                        // Looked away — clear focus normally (revert will fire)
+                    }
                     clearFocus(player);
                 }
                 hoverByPlayer.remove(player.getUniqueId());
@@ -317,6 +339,16 @@ public final class FocusScanner {
         List<UUID> affected = findRelatedFrames(player, frame, resolved, cfg);
         // Apply visuals to all frames in the image, HUD only once.
         effectManager.onFocus(player, frame, resolved, cfg);
+        // Swap all frames — save originals and tile indices BEFORE any swap occurs.
+        for (UUID frameUuid : affected) {
+            ItemFrame f = getFrame(frameUuid, player.getWorld());
+            if (f != null) {
+                imageSwapManager.onFocus(f, resolved.rule());
+            }
+        }
+        // After all individual onFocus calls, register the group and schedule auto-revert.
+        imageSwapManager.onFocusGroupDone(affected, resolved.rule());
+
         for (UUID frameUuid : affected) {
             if (frameUuid.equals(frame.getUniqueId())) {
                 continue;
@@ -485,6 +517,8 @@ public final class FocusScanner {
             ItemFrame frame = getFrame(frameUuid, world);
             if (frame != null) {
                 effectManager.onUnfocusVisuals(frame, state.target(), cfg);
+                // Revert image swap for every frame in the image group.
+                imageSwapManager.onUnfocus(frame, state.target() != null ? state.target().rule() : null);
             }
         }
         effectManager.onUnfocus(player, null, state.target(), cfg, true);

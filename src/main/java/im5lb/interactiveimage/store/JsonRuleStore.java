@@ -157,19 +157,22 @@ public final class JsonRuleStore implements RuleStore {
 
         InteractiveImageConfig.MapRule base = rule == null
                 ? new InteractiveImageConfig.MapRule(
+                true,
                 mapKey,
                 10,
                 true,
                 List.of(),
                 List.of(),
                 InteractiveImageConfig.MapActivation.inherit(),
-                InteractiveImageConfig.MapEffects.empty()
+                InteractiveImageConfig.MapEffects.empty(),
+                null
         )
                 : rule;
 
         String title = base.title() == null || base.title().isBlank() ? mapKey : base.title();
         int cooldownTicks = Math.max(0, base.cooldownTicks());
         boolean cancelInteract = base.cancelInteract();
+        boolean enabled = base.enabled();
 
         List<String> right = base.onRightClick() == null ? List.of() : List.copyOf(base.onRightClick());
         List<String> left = base.onLeftClick() == null ? List.of() : List.copyOf(base.onLeftClick());
@@ -249,7 +252,7 @@ public final class JsonRuleStore implements RuleStore {
                 bossNormalized
         );
 
-        return new InteractiveImageConfig.MapRule(title, cooldownTicks, cancelInteract, right, left, activationNormalized, effectsNormalized);
+        return new InteractiveImageConfig.MapRule(enabled, title, cooldownTicks, cancelInteract, right, left, activationNormalized, effectsNormalized, base.imageSwap());
     }
 
     private record RulesFile(int version, ProviderSection imageframe) {

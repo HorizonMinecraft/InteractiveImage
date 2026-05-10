@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.2-alpha] - 2026-05-10
+
+### Added
+- Image Swap — hover a frame to display a different map, with auto-revert and revert-on-unfocus options
+- Extended-range clicking — click actions now fire beyond vanilla 3-block reach
+- Wildcard rule (`*`) — applies to all maps with no explicit rule
+- `/ii enable|disable <mapName>` — toggle a map rule from command line
+
+---
+
 ## [1.0.1] - 2026-05-06
 
 ### Fixed

@@ -43,10 +43,16 @@ public final class EditorGui {
         drawFrame(inventory);
         inventory.setItem(SLOT_HEADER, header(mapName));
 
+        boolean enabled = rule == null || rule.enabled();
         boolean cancelInteract = rule == null || rule.cancelInteract();
 
         inventory.setItem(20, item(Material.BARRIER, ChatColor.YELLOW + "Cancel Interact",
                 lore("Current: ", String.valueOf(cancelInteract)),
+                hint("Click to toggle")
+        ));
+
+        inventory.setItem(21, item(enabled ? Material.LIME_DYE : Material.RED_DYE, ChatColor.YELLOW + "Enabled",
+                lore("Current: ", String.valueOf(enabled)),
                 hint("Click to toggle")
         ));
 
@@ -55,6 +61,13 @@ public final class EditorGui {
         ));
         inventory.setItem(23, item(Material.REPEATER, ChatColor.GOLD + "Activation",
                 hint("Open activation settings")
+        ));
+
+        String swapMap = rule != null && rule.imageSwap() != null && rule.imageSwap().hoverMap() != null
+                ? rule.imageSwap().hoverMap() : "none";
+        inventory.setItem(24, item(Material.PAINTING, ChatColor.GOLD + "Image Swap",
+                lore("Hover map: ", swapMap),
+                hint("Click to configure")
         ));
 
         List<String> rightActions = rule == null ? List.of() : rule.onRightClick();
@@ -333,6 +346,91 @@ public final class EditorGui {
     }
 
     public record ActivationHolder(String mapName) implements InventoryHolder {
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    public static Inventory createSwap(InteractiveImage plugin, String mapName) {
+        return createSwap(plugin, mapName, 0);
+    }
+
+    public static Inventory createSwap(InteractiveImage plugin, String mapName, int page) {
+        Inventory inventory = Bukkit.createInventory(new SwapHolder(mapName, page), SIZE,
+                TITLE_PREFIX + mapName + ChatColor.DARK_GRAY + " » Image Swap");
+
+        Optional<InteractiveImageConfig.MapRule> ruleOpt = plugin.getRuleStore().findImageFrameRule(mapName);
+        InteractiveImageConfig.MapRule rule = ruleOpt.orElse(null);
+        InteractiveImageConfig.ImageSwap swap = rule != null ? rule.imageSwap() : null;
+
+        drawFrame(inventory);
+        inventory.setItem(SLOT_HEADER, header(mapName));
+
+        String hoverMap = swap != null && swap.hoverMap() != null ? swap.hoverMap() : null;
+        boolean revertOnUnfocus = swap == null || swap.revertOnUnfocus();
+        int autoSwapTicks = swap != null ? swap.autoSwapTicks() : 0;
+
+        // Row 2: settings
+        inventory.setItem(10, item(Material.LEAD, ChatColor.YELLOW + "Revert on Unfocus",
+                lore("Current: ", String.valueOf(revertOnUnfocus)),
+                hint("Click to toggle")
+        ));
+        inventory.setItem(11, item(Material.CLOCK, ChatColor.AQUA + "Auto-swap Ticks",
+                lore("Current: ", autoSwapTicks == 0 ? "disabled" : String.valueOf(autoSwapTicks)),
+                hint("Click to edit")
+        ));
+        inventory.setItem(13, item(Material.BARRIER, ChatColor.RED + "Clear Hover Map",
+                lore("Current: ", hoverMap != null ? hoverMap : "none"),
+                hint("Click to remove hover map")
+        ));
+
+        // Map picker — slots 19-43 (3 rows × 7 cols, skipping border)
+        // Available slots inside the border: row3=19-25, row4=28-34, row5=37-43
+        int[] pickerSlots = {19,20,21,22,23,24,25, 28,29,30,31,32,33,34, 37,38,39,40,41,42,43};
+        // Only show maps with the same tile count as the source map (same size)
+        List<String> allMaps = plugin.getImageSwapManager().getCompatibleMapNames(mapName);
+        int perPage = pickerSlots.length;
+        int totalPages = allMaps.isEmpty() ? 1 : (int) Math.ceil((double) allMaps.size() / perPage);
+        int safePage = Math.max(0, Math.min(page, totalPages - 1));
+        int start = safePage * perPage;
+
+        for (int i = 0; i < pickerSlots.length; i++) {
+            int idx = start + i;
+            if (idx >= allMaps.size()) break;
+            String name = allMaps.get(idx);
+            boolean selected = name.equalsIgnoreCase(hoverMap);
+            Material mat = selected ? Material.FILLED_MAP : Material.MAP;
+            List<String> extraLore = selected
+                    ? List.of(ChatColor.GREEN + "✔ Currently selected")
+                    : List.of(ChatColor.DARK_GRAY + "Click to select");
+            inventory.setItem(pickerSlots[i], item(mat, (selected ? ChatColor.GREEN : ChatColor.WHITE) + name, extraLore));
+        }
+
+        if (allMaps.isEmpty()) {
+            inventory.setItem(31, item(Material.PAPER, ChatColor.GRAY + "No compatible maps found",
+                    hint("Maps must be the same size as: " + mapName)));
+        }
+
+        // Pagination
+        if (safePage > 0) {
+            inventory.setItem(46, item(Material.ARROW, ChatColor.YELLOW + "Previous Page",
+                    lore("Page: ", safePage + "/" + totalPages)));
+        }
+        if (safePage < totalPages - 1) {
+            inventory.setItem(52, item(Material.ARROW, ChatColor.YELLOW + "Next Page",
+                    lore("Page: ", (safePage + 2) + "/" + totalPages)));
+        }
+
+        inventory.setItem(SLOT_BACK, item(Material.ARROW, ChatColor.GRAY + "Back", hint("Return to main menu")));
+        return inventory;
+    }
+
+    public record SwapHolder(String mapName, int page) implements InventoryHolder {
+        public SwapHolder(String mapName) {
+            this(mapName, 0);
+        }
+
         @Override
         public Inventory getInventory() {
             return null;

@@ -84,14 +84,23 @@ public record InteractiveImageConfig(
     ) {
     }
 
+    public record ImageSwap(
+            String hoverMap,
+            boolean revertOnUnfocus,
+            int autoSwapTicks
+    ) {
+    }
+
     public record MapRule(
+            boolean enabled,
             String title,
             int cooldownTicks,
             boolean cancelInteract,
             List<String> onRightClick,
             List<String> onLeftClick,
             MapActivation activation,
-            MapEffects effects
+            MapEffects effects,
+            ImageSwap imageSwap
     ) {
     }
 

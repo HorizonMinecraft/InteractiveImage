@@ -110,6 +110,7 @@ public final class EditorManager {
             case BOSSBAR_STYLE -> showSingleOptionDialog(player, type, map, title, initial, enumNames(BarStyle.values()));
             case GLOW_COLOR -> showSingleOptionDialog(player, type, map, title, initial, glowColorNames());
             case GLOW_MODE -> showSingleOptionDialog(player, type, map, title, initial, List.of("BLOCK", "FRAME"));
+            case SWAP_AUTO_TICKS -> showNumberRangeDialog(player, type, map, title, 0, 1200, 20, initial, 0);
             default -> showTextInputDialog(player, type, map, title, initial);
         }
     }
@@ -387,6 +388,8 @@ public final class EditorManager {
             case BOSSBAR_PROGRESS -> "BossBar Progress";
             case HOVER_MAX_DISTANCE -> "Hover Range";
             case CLICK_MAX_DISTANCE -> "Click Range";
+            case SWAP_HOVER_MAP -> "Hover Map";
+            case SWAP_AUTO_TICKS -> "Auto-swap Ticks";
         };
     }
 
@@ -409,6 +412,8 @@ public final class EditorManager {
             case BOSSBAR_PROGRESS -> String.valueOf(rule == null || rule.effects().bossBar().progress() == null ? global.effects().bossBar().progress() : rule.effects().bossBar().progress());
             case HOVER_MAX_DISTANCE -> String.valueOf(rule == null || rule.activation().hoverMaxDistance() == null ? global.activation().hover().maxDistance() : rule.activation().hoverMaxDistance());
             case CLICK_MAX_DISTANCE -> String.valueOf(rule == null || rule.activation().clickMaxDistance() == null ? global.activation().click().maxDistance() : rule.activation().clickMaxDistance());
+            case SWAP_HOVER_MAP -> rule != null && rule.imageSwap() != null ? rule.imageSwap().hoverMap() : "";
+            case SWAP_AUTO_TICKS -> rule != null && rule.imageSwap() != null ? String.valueOf(rule.imageSwap().autoSwapTicks()) : "0";
         };
     }
 
@@ -505,6 +510,41 @@ public final class EditorManager {
                 return;
             }
             IiConfigEditor.setOptionalDouble(plugin, mapName, "activation.click.maxDistance", value);
+        } else if (type == EditorInputType.SWAP_HOVER_MAP) {
+            Optional<InteractiveImageConfig.MapRule> ruleOpt = plugin.getRuleStore().findImageFrameRule(mapName);
+            InteractiveImageConfig.MapRule rule = ruleOpt.orElse(null);
+            InteractiveImageConfig.ImageSwap existing = rule != null ? rule.imageSwap() : null;
+            String hoverMap = trimmed.isEmpty() ? null : trimmed;
+            InteractiveImageConfig.ImageSwap updated = new InteractiveImageConfig.ImageSwap(
+                    hoverMap,
+                    existing == null || existing.revertOnUnfocus(),
+                    existing != null ? existing.autoSwapTicks() : 0
+            );
+            IiConfigEditor.setImageSwap(plugin, mapName, updated);
+        } else if (type == EditorInputType.SWAP_AUTO_TICKS) {
+            int ticks;
+            try {
+                double d = Double.parseDouble(trimmed);
+                ticks = (int) Math.round(d);
+            } catch (NumberFormatException e) {
+                player.sendMessage("Not a number.");
+                openSwapForMap(player, mapName);
+                return;
+            }
+            if (ticks < 0) {
+                player.sendMessage("Ticks must be >= 0.");
+                openSwapForMap(player, mapName);
+                return;
+            }
+            Optional<InteractiveImageConfig.MapRule> ruleOpt = plugin.getRuleStore().findImageFrameRule(mapName);
+            InteractiveImageConfig.MapRule rule = ruleOpt.orElse(null);
+            InteractiveImageConfig.ImageSwap existing = rule != null ? rule.imageSwap() : null;
+            InteractiveImageConfig.ImageSwap updated = new InteractiveImageConfig.ImageSwap(
+                    existing != null ? existing.hoverMap() : null,
+                    existing == null || existing.revertOnUnfocus(),
+                    ticks
+            );
+            IiConfigEditor.setImageSwap(plugin, mapName, updated);
         }
 
         openMenuForType(player, type, mapName);
@@ -539,6 +579,11 @@ public final class EditorManager {
             openActivationForMap(player, mapName);
             return;
         }
+        if (type == EditorInputType.SWAP_HOVER_MAP
+                || type == EditorInputType.SWAP_AUTO_TICKS) {
+            openSwapForMap(player, mapName);
+            return;
+        }
         openMainForMap(player, mapName);
     }
 
@@ -560,6 +605,11 @@ public final class EditorManager {
     private void openActivationForMap(Player player, String mapName) {
         IiConfigEditor.ensureImageFrameRuleExists(plugin, mapName);
         player.openInventory(EditorGui.createActivation(plugin, mapName));
+    }
+
+    public void openSwapForMap(Player player, String mapName) {
+        IiConfigEditor.ensureImageFrameRuleExists(plugin, mapName);
+        player.openInventory(EditorGui.createSwap(plugin, mapName, 0));
     }
 
     private static int parseInt(Player player, String input) {
