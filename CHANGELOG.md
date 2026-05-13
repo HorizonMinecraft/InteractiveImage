@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.3-alpha] - 2026-05-13
+
+### Added
+- **Update Notifier** — automatically checks for new plugin versions on startup
+- Notifies admins in-game when an update is available (with 24-hour cooldown)
+- Config option to enable/disable update checking (`check-for-updates: true`)
+- Debug logging for troubleshooting update checks
+
+---
+
 ## [1.0.2-alpha] - 2026-05-10
 
 ### Added

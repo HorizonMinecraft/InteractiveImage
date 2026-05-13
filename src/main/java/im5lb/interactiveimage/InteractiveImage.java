@@ -19,7 +19,12 @@ import im5lb.interactiveimage.listeners.FrameInteractListener;
 import im5lb.interactiveimage.listeners.FocusedAirClickListener;
 import im5lb.interactiveimage.store.JsonRuleStore;
 import im5lb.interactiveimage.store.RuleStore;
+import im5lb.interactiveimage.util.UpdateChecker;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -38,6 +43,7 @@ public final class InteractiveImage extends JavaPlugin {
     private EditorManager editorManager;
     private JsonRuleStore ruleStore;
     private ImageSwapManager imageSwapManager;
+    private UpdateChecker updateChecker;
 
     private final List<TargetResolver> resolvers = new ArrayList<>();
 
@@ -55,6 +61,35 @@ public final class InteractiveImage extends JavaPlugin {
             getDataFolder().mkdirs();
         }
 
+        // Load config
+        saveDefaultConfig();
+        reloadInteractiveImageConfig();
+
+        // Initialize update checker
+        if (getConfig().getBoolean("check-for-updates", true)) {
+            updateChecker = new UpdateChecker(this);
+            updateChecker.checkForUpdates().thenAccept(available -> {
+                if (available) {
+                    getLogger().info("[interactiveimage] Update available: " + updateChecker.getLatestVersion());
+                }
+            });
+        }
+
+        // Register player join listener for update notifications
+        Bukkit.getPluginManager().registerEvents(new Listener() {
+            @EventHandler
+            public void onPlayerJoin(PlayerJoinEvent event) {
+                if (updateChecker != null && updateChecker.shouldNotify()) {
+                    Player player = event.getPlayer();
+                    if (player.hasPermission("interactiveimage.admin")) {
+                        Bukkit.getScheduler().runTaskLater(InteractiveImage.this, () -> {
+                            updateChecker.sendUpdateNotification(player);
+                        }, 60L);
+                    }
+                }
+            }
+        }, InteractiveImage.this);
+
         // No global settings files (no settings.json, no config.yml).
         // Only per-frame rules are stored in a single JSON data file.
         Path settingsPath = Path.of(getDataFolder().getAbsolutePath(), "settings.json");
@@ -66,7 +101,6 @@ public final class InteractiveImage extends JavaPlugin {
         } catch (IOException e) {
             getLogger().warning("[interactiveimage] Failed to delete settings.json: " + e.getMessage());
         }
-        reloadInteractiveImageConfig();
 
         ruleStore = new JsonRuleStore(this, Path.of(getDataFolder().getAbsolutePath(), "iiamge.json"));
         ruleStore.load();
@@ -121,6 +155,20 @@ public final class InteractiveImage extends JavaPlugin {
 
     public void reloadAndRestart() {
         reloadInteractiveImageConfig();
+
+        // Handle update checker on reload
+        boolean updateCheckEnabled = getConfig().getBoolean("check-for-updates", true);
+        if (updateCheckEnabled && updateChecker == null) {
+            updateChecker = new UpdateChecker(this);
+            updateChecker.checkForUpdates().thenAccept(available -> {
+                if (available) {
+                    getLogger().info("[interactiveimage] Update available: " + updateChecker.getLatestVersion());
+                }
+            });
+        } else if (!updateCheckEnabled && updateChecker != null) {
+            updateChecker = null;
+        }
+
         if (focusScanner != null) {
             focusScanner.start();
         }
@@ -151,6 +199,14 @@ public final class InteractiveImage extends JavaPlugin {
 
     public ImageSwapManager getImageSwapManager() {
         return imageSwapManager;
+    }
+
+    public UpdateChecker getUpdateChecker() {
+        return updateChecker;
+    }
+
+    public boolean isDebugMode() {
+        return getConfig().getBoolean("debug-mode", false);
     }
 
     private static final class InteractiveFrameDefaults {
