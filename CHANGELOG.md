@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ## [1.0.4-alpha] - 2026-08-11
 
 ### Fixed
@@ -9,6 +10,8 @@
 
 ---
 
+=======
+>>>>>>> def349e1f6806da719d6faffa5194baafb6b4e8c
 ## [1.0.3-alpha] - 2026-05-13
 
 ### Added
