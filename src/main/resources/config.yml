@@ -1,0 +1,29 @@
+# InteractiveImage Configuration
+# Advanced Image Frame Plugin for Minecraft
+
+# Configuration version (DO NOT EDIT)
+config-version: 1
+
+# ┌─────────────────────────────────────────────────────────┐
+# │                     System Settings                     │
+# └─────────────────────────────────────────────────────────┘
+
+# Debug mode - Enable detailed logging for troubleshooting
+debug-mode: false
+
+# Update checking - Automatically check for plugin updates
+check-for-updates: true
+
+# Metrics (bStats)
+metrics-enabled: true
+
+# ┌─────────────────────────────────────────────────────────┐
+# │                      Need Help?                         │
+# └─────────────────────────────────────────────────────────┘
+# Commands:
+#   /ii on              - Enable interactive image mode
+#   /ii off             - Disable interactive image mode
+#   /ii reload          - Reload configuration
+#
+# Support: https://discord.gg/j8BNhh2xNw
+# Documentation: comming soon
